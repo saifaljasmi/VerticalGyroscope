@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vertical Gyro — Attitude Indicator</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:22px auto;padding:0 16px;background:#fff;color:#1a1a1a}
+h1{font-size:19px;font-weight:600;margin-bottom:2px}
+p.sub{font-size:13px;color:#666;margin-top:0}
+.row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.sl{flex:1;min-width:150px;display:flex;align-items:center;gap:7px}
+.sl label{font-size:12.5px;color:#666;min-width:36px}
+.sl input{flex:1}
+.sl span{font-size:12.5px;font-weight:500;min-width:40px}
+#stage{position:relative}
+#wrap{position:relative;height:470px;border:1px solid #e4e4e2;border-radius:10px;overflow:hidden;background:#fff}
+#overlay{position:absolute;inset:0;pointer-events:none}
+.lbl{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+     font-weight:650;color:#141414;letter-spacing:.01em;
+     text-shadow:0 0 4px #fff,0 0 4px #fff,0 0 8px #fff,1px 1px 0 #fff,-1px -1px 0 #fff}
+.dotm{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);
+      box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+#status{position:absolute;bottom:8px;left:8px;right:8px}
+.btns{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+button{padding:5px 12px;border:1px solid #c2c2c0;background:#fff;border-radius:7px;cursor:pointer;font-size:12.5px}
+button:hover{background:#f3f3f1}
+table{border-collapse:collapse;margin-top:14px;font-size:12.5px;width:100%}
+th,td{border:1px solid #e0e0de;padding:6px 9px;text-align:left}
+th{background:#f6f6f4;font-weight:600}
+</style>
+</head>
+<body>
+<h1>Vertical Gyro — Attitude Indicator</h1>
+<p class="sub">Spin axis vertical. Free in pitch and roll, blind in yaw. Can only <b>topple</b> — it has no drift.</p>
+<div class="row">
+<div class="sl"><label>Pitch</label><input type="range" id="pitch" min="-40" max="40" value="0" step="1"><span id="pv">0°</span></div>
+<div class="sl"><label>Roll</label><input type="range" id="bank" min="-60" max="60" value="0" step="1"><span id="bv">0°</span></div>
+<div class="sl"><label>Yaw</label><input type="range" id="yaw" min="-60" max="60" value="0" step="1"><span id="yv">0°</span></div>
+</div>
+<div class="row"><div class="sl" style="max-width:320px"><label style="min-width:66px">Labels</label><input type="range" id="lsize" min="9" max="22" value="13" step="1"><span id="lsv">13px</span></div><label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#666"><input type="checkbox" id="shortnames" checked> Shorten names</label></div>
+<div id="stage"><div id="wrap"><div id="overlay"></div></div><div id="status"></div></div>
+<div class="btns">
+<button onclick="setV(0,0,0)">Level</button>
+<button onclick="setV(25,0,0)">Pitch</button>
+<button onclick="setV(0,45,0)">Roll</button>
+<button onclick="setV(0,0,45)">Yaw</button>
+<button onclick="setV(15,35,20)">Climbing turn</button>
+<button onclick="toggleLabels()">Labels on/off</button>
+</div>
+<table>
+<tr><th>Input</th><th>Absorbed at</th><th>What moves</th></tr>
+<tr><td>Pitch</td><td>Outer gimbal bearings — lateral, frame&rarr;outer gimbal</td><td>Frame only</td></tr>
+<tr><td>Roll</td><td>Inner gimbal bearings — longitudinal, outer gimbal&rarr;inner gimbal</td><td>Frame + outer gimbal</td></tr>
+<tr><td>Yaw</td><td>No pin — it is the spin axis</td><td>All rings turn, rotor unchanged</td></tr>
+</table>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const wrap=document.getElementById('wrap'),overlay=document.getElementById('overlay');
+const W=wrap.clientWidth,H=470;
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(42,W/H,0.1,100);
+cam.position.set(6.8,3.7,7.2);cam.lookAt(0,-0.5,0);
+const ren=new THREE.WebGLRenderer({antialias:true,alpha:true});
+ren.setSize(W,H);ren.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+wrap.insertBefore(ren.domElement,overlay);
+scene.add(new THREE.AmbientLight(0xffffff,0.74));
+const dl=new THREE.DirectionalLight(0xffffff,0.85);dl.position.set(4,7,5);scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,0.3);dl2.position.set(-5,2,-4);scene.add(dl2);
+const FRAME_C=0xBFC5CB,GIMBAL_C=0x474D53,INNER_C=0xB5763A,GOLD=0xF0C244,GOLD_D=0xCE9A22,
+      PIN_C=0xEDF1F4,SHAFT_C=0x2E2E2E,AC_C=0x90969C;
+/* --- HTML overlay callouts: crisp text, fixed pixel offset from the part --- */
+const TAGS=[];
+const SN=document.getElementById('shortnames');
+function tag(text,parent,anchor,off,css){
+const a=new THREE.Object3D();a.position.set(anchor[0],anchor[1],anchor[2]);parent.add(a);
+const el=document.createElement('div');el.className='lbl';el.dataset.full=text;el.textContent=text;
+el.style.color=css;overlay.appendChild(el);
+const d=document.createElement('div');d.className='dotm';d.style.background=css;overlay.appendChild(d);
+TAGS.push({a:a,el:el,d:d,off:off,offShort:[Math.sign(off[0])*14,off[1]<0?-16:16]});}
+/* FRAME = case/aircraft : vertical ring, YZ plane */
+const frameG=new THREE.Group();scene.add(frameG);
+const frameMat=new THREE.MeshStandardMaterial({color:FRAME_C,roughness:0.26,metalness:0.85});
+const frameRing=new THREE.Mesh(new THREE.TorusGeometry(2.15,0.11,22,72),frameMat);
+frameRing.rotation.y=Math.PI/2;frameG.add(frameRing);
+const pitchPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
+const pp1=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.6,16),pitchPinMat);
+pp1.rotation.x=Math.PI/2;pp1.position.set(0,0,1.9);frameG.add(pp1);
+const pp2=pp1.clone();pp2.position.set(0,0,-1.9);frameG.add(pp2);
+const acMat=new THREE.MeshStandardMaterial({color:AC_C,roughness:0.5,metalness:0.45});
+const fus=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,4.4,14),acMat);
+fus.rotation.z=Math.PI/2;fus.position.y=-2.8;frameG.add(fus);
+const nose=new THREE.Mesh(new THREE.ConeGeometry(0.15,0.44,16),acMat);
+nose.rotation.z=-Math.PI/2;nose.position.set(2.42,-2.8,0);frameG.add(nose);
+const wing=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.03,3.2),acMat);
+wing.position.set(0.35,-2.8,0);frameG.add(wing);
+const tail=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.48,0.03),acMat);
+tail.position.set(-2.05,-2.57,0);frameG.add(tail);
+tag('AIRCRAFT',frameG,[1.4,-2.8,0],[0,24],'#6E747A');
+tag('FRAME / CASE',frameG,[0,1.52,-1.52],[-16,-22],'#5C6268');
+tag('OUTER GIMBAL BEARINGS',frameG,[0,0,1.9],[76,18],'#4A5056');
+/* GIMBAL : horizontal ring, XZ plane */
+const gimbalG=new THREE.Group();scene.add(gimbalG);
+const gimbalMat=new THREE.MeshStandardMaterial({color:GIMBAL_C,roughness:0.34,metalness:0.72});
+const gimbalRing=new THREE.Mesh(new THREE.TorusGeometry(1.65,0.1,22,72),gimbalMat);
+gimbalRing.rotation.x=Math.PI/2;gimbalG.add(gimbalRing);
+const rollPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
+const rp1=new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.095,0.56,16),rollPinMat);
+rp1.rotation.z=Math.PI/2;rp1.position.set(1.42,0,0);gimbalG.add(rp1);
+const rp2=rp1.clone();rp2.position.set(-1.42,0,0);gimbalG.add(rp2);
+tag('OUTER GIMBAL',gimbalG,[-1.17,0,1.17],[-44,14],'#3B4046');
+tag('INNER GIMBAL BEARINGS',gimbalG,[1.42,0,0],[78,-6],'#4A5056');
+/* INNER RING : vertical ring, XY plane, carries the shaft */
+const innerG=new THREE.Group();scene.add(innerG);
+const innerMat=new THREE.MeshStandardMaterial({color:INNER_C,roughness:0.4,metalness:0.6});
+const innerRing=new THREE.Mesh(new THREE.TorusGeometry(1.22,0.095,22,72),innerMat);
+innerG.add(innerRing);
+const bearMat=new THREE.MeshStandardMaterial({color:0x7A4E22,roughness:0.28,metalness:0.8});
+const bt=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,0.28,18),bearMat);
+bt.position.set(0,1.16,0);innerG.add(bt);
+const bb=bt.clone();bb.position.set(0,-1.16,0);innerG.add(bb);
+tag('INNER GIMBAL',innerG,[0.86,0.86,0],[52,-10],'#A05F22');
+tag('ROTOR BEARINGS',innerG,[0,-1.16,0],[-62,20],'#7A4E22');
+/* ROTOR */
+const rotorG=new THREE.Group();scene.add(rotorG);
+const rotorMat=new THREE.MeshStandardMaterial({color:GOLD,roughness:0.3,metalness:0.75});
+const rotor=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.19,56),rotorMat);
+rotorG.add(rotor);
+const rim=new THREE.Mesh(new THREE.TorusGeometry(0.9,0.07,16,56),
+new THREE.MeshStandardMaterial({color:GOLD_D,roughness:0.28,metalness:0.85}));
+rim.rotation.x=Math.PI/2;rotorG.add(rim);
+const idx=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.22,0.09),new THREE.MeshStandardMaterial({color:0x2A2A2A}));
+idx.position.set(0.9,0,0);rotorG.add(idx);
+const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,2.9,16),
+new THREE.MeshStandardMaterial({color:SHAFT_C,roughness:0.34,metalness:0.72}));
+rotorG.add(shaft);
+tag('ROTOR',rotorG,[0.6,0.09,0.6],[40,10],'#9A7415');
+tag('SPIN AXIS',rotorG,[0,1.4,0],[40,-12],'#2E2E2E');
+const grid=new THREE.GridHelper(10,20,0xe9e9e7,0xf2f2f0);grid.position.y=-3.7;scene.add(grid);
+const P=document.getElementById('pitch'),B=document.getElementById('bank'),Y=document.getElementById('yaw');
+const status=document.getElementById('status');
+function setV(p,b,y){P.value=p;B.value=b;Y.value=y;}
+let labelsOn=true;
+function toggleLabels(){labelsOn=!labelsOn;
+TAGS.forEach(t=>{t.el.style.display=labelsOn?'':'none';t.d.style.display=labelsOn?'':'none';});}
+const LS=document.getElementById('lsize');
+function applyLabelSize(){
+document.getElementById('lsv').textContent=LS.value+'px';
+TAGS.forEach(t=>t.el.style.fontSize=LS.value+'px');}
+LS.addEventListener('input',applyLabelSize);applyLabelSize();
+const SHORT={"OUTER GIMBAL BEARINGS": "OGB", "INNER GIMBAL BEARINGS": "IGB", "ROTOR BEARINGS": "RB", "OUTER GIMBAL": "OG", "INNER GIMBAL": "IG", "SPIN AXIS": "SA", "ROTOR": "R", "FRAME / CASE": "FRAME", "AIRCRAFT": "A/C"};
+
+function applyNames(){const on=SN.checked;
+TAGS.forEach(t=>{const f=t.el.dataset.full;t.el.textContent=on?(SHORT[f]||f):f;});}
+SN.addEventListener('change',applyNames);applyNames();
+function chip(t,b){return '<div style="background:rgba(255,255,255,0.95);border-left:3px solid #666;padding:6px 10px;font-size:12px;line-height:1.4"><b>'+t+'</b> '+b+'</div>';}
+const wv=new THREE.Vector3();
+let sp=0;
+function anim(){
+const pd=+P.value,bd=+B.value,yd=+Y.value;
+const p=pd*Math.PI/180,b=bd*Math.PI/180,y=yd*Math.PI/180;
+document.getElementById('pv').textContent=pd+'\u00B0';
+document.getElementById('bv').textContent=bd+'\u00B0';
+document.getElementById('yv').textContent=yd+'\u00B0';
+pitchPinMat.emissive.setHex(0x000000);rollPinMat.emissive.setHex(0x000000);
+let html='';
+if(pd!==0){pitchPinMat.emissive.setHex(0x6a5a2a);
+html+=chip('Pitch '+pd+'\u00B0 — OUTER GIMBAL BEARINGS.','Only the frame tilts; outer gimbal, inner gimbal and rotor stay put.');}
+if(bd!==0){rollPinMat.emissive.setHex(0x6a5a2a);
+html+=chip('Roll '+bd+'\u00B0 — INNER GIMBAL BEARINGS.','Frame + outer gimbal rotate around the fixed inner ring and rotor.');}
+if(yd!==0){html+=chip('Yaw '+yd+'\u00B0 — no pin.','All rings dragged; the rotor bearings absorb it, so the rotor and vertical reference are unchanged.');}
+if(html===''){html=chip('Level.','frame \u2192 outer gimbal brgs \u2192 outer gimbal \u2192 inner gimbal brgs \u2192 inner gimbal \u2192 rotor brgs \u2192 rotor');}
+status.innerHTML=html;
+frameG.rotation.set(0,0,0);
+frameG.rotateY(y);frameG.rotateX(b);frameG.rotateZ(p);
+gimbalG.rotation.set(0,0,0);
+gimbalG.rotateY(y);gimbalG.rotateX(b);
+innerG.rotation.set(0,0,0);
+innerG.rotateY(y);
+sp+=0.28;rotorG.rotation.y=sp;
+scene.updateMatrixWorld(true);
+TAGS.forEach(function(t){
+t.a.getWorldPosition(wv);wv.project(cam);
+const sx=(wv.x*0.5+0.5)*W, sy=(-wv.y*0.5+0.5)*H;
+t.d.style.left=sx+'px';t.d.style.top=sy+'px';
+const o=SN.checked?t.offShort:t.off;
+t.el.style.left=(sx+o[0])+'px';t.el.style.top=(sy+o[1])+'px';});
+ren.render(scene,cam);
+requestAnimationFrame(anim);
+}
+anim();
+window.setV=setV;window.toggleLabels=toggleLabels;
+</script>
+</body>
+</html>
