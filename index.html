@@ -50,8 +50,8 @@ th{background:#f6f6f4;font-weight:600}
 </div>
 <table>
 <tr><th>Input</th><th>Absorbed at</th><th>What moves</th></tr>
-<tr><td>Pitch</td><td>Outer gimbal bearings — lateral, frame&rarr;outer gimbal</td><td>Frame only</td></tr>
-<tr><td>Roll</td><td>Inner gimbal bearings — longitudinal, outer gimbal&rarr;inner gimbal</td><td>Frame + outer gimbal</td></tr>
+<tr><td>Roll</td><td>Outer gimbal bearings — longitudinal, frame&rarr;outer gimbal</td><td>Frame only</td></tr>
+<tr><td>Pitch</td><td>Inner gimbal bearings — lateral, outer gimbal&rarr;inner gimbal</td><td>Frame + outer gimbal</td></tr>
 <tr><td>Yaw</td><td>No pin — it is the spin axis</td><td>All rings turn, rotor unchanged</td></tr>
 </table>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -83,8 +83,8 @@ const frameG=new THREE.Group();scene.add(frameG);
 const frameMat=new THREE.MeshStandardMaterial({color:FRAME_C,roughness:0.26,metalness:0.85});
 const frameRing=new THREE.Mesh(new THREE.TorusGeometry(2.15,0.11,22,72),frameMat);
 frameRing.rotation.y=Math.PI/2;frameG.add(frameRing);
-const pitchPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
-const pp1=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.6,16),pitchPinMat);
+const outerPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
+const pp1=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.6,16),outerPinMat);
 pp1.rotation.x=Math.PI/2;pp1.position.set(0,0,1.9);frameG.add(pp1);
 const pp2=pp1.clone();pp2.position.set(0,0,-1.9);frameG.add(pp2);
 const acMat=new THREE.MeshStandardMaterial({color:AC_C,roughness:0.5,metalness:0.45});
@@ -105,8 +105,8 @@ const gimbalG=new THREE.Group();scene.add(gimbalG);
 const gimbalMat=new THREE.MeshStandardMaterial({color:GIMBAL_C,roughness:0.34,metalness:0.72});
 const gimbalRing=new THREE.Mesh(new THREE.TorusGeometry(1.65,0.1,22,72),gimbalMat);
 gimbalRing.rotation.x=Math.PI/2;gimbalG.add(gimbalRing);
-const rollPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
-const rp1=new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.095,0.56,16),rollPinMat);
+const innerPinMat=new THREE.MeshStandardMaterial({color:PIN_C,roughness:0.18,metalness:0.95});
+const rp1=new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.095,0.56,16),innerPinMat);
 rp1.rotation.z=Math.PI/2;rp1.position.set(1.42,0,0);gimbalG.add(rp1);
 const rp2=rp1.clone();rp2.position.set(-1.42,0,0);gimbalG.add(rp2);
 tag('OUTER GIMBAL',gimbalG,[-1.17,0,1.17],[-44,14],'#3B4046');
@@ -163,19 +163,19 @@ const p=pd*Math.PI/180,b=bd*Math.PI/180,y=yd*Math.PI/180;
 document.getElementById('pv').textContent=pd+'\u00B0';
 document.getElementById('bv').textContent=bd+'\u00B0';
 document.getElementById('yv').textContent=yd+'\u00B0';
-pitchPinMat.emissive.setHex(0x000000);rollPinMat.emissive.setHex(0x000000);
+outerPinMat.emissive.setHex(0x000000);innerPinMat.emissive.setHex(0x000000);
 let html='';
-if(pd!==0){pitchPinMat.emissive.setHex(0x6a5a2a);
-html+=chip('Pitch '+pd+'\u00B0 — OUTER GIMBAL BEARINGS.','Only the frame tilts; outer gimbal, inner gimbal and rotor stay put.');}
-if(bd!==0){rollPinMat.emissive.setHex(0x6a5a2a);
-html+=chip('Roll '+bd+'\u00B0 — INNER GIMBAL BEARINGS.','Frame + outer gimbal rotate around the fixed inner ring and rotor.');}
+if(pd!==0){innerPinMat.emissive.setHex(0x6a5a2a);
+html+=chip('Pitch '+pd+'\u00B0 — INNER GIMBAL BEARINGS (lateral).','Frame + outer gimbal tilt together; inner gimbal and rotor stay put.');}
+if(bd!==0){outerPinMat.emissive.setHex(0x6a5a2a);
+html+=chip('Roll '+bd+'\u00B0 — OUTER GIMBAL BEARINGS (longitudinal).','Only the frame rolls around the gyro; everything inside stays put.');}
 if(yd!==0){html+=chip('Yaw '+yd+'\u00B0 — no pin.','All rings dragged; the rotor bearings absorb it, so the rotor and vertical reference are unchanged.');}
 if(html===''){html=chip('Level.','frame \u2192 outer gimbal brgs \u2192 outer gimbal \u2192 inner gimbal brgs \u2192 inner gimbal \u2192 rotor brgs \u2192 rotor');}
 status.innerHTML=html;
 frameG.rotation.set(0,0,0);
-frameG.rotateY(y);frameG.rotateX(b);frameG.rotateZ(p);
+frameG.rotateY(y);frameG.rotateX(p);frameG.rotateZ(b);
 gimbalG.rotation.set(0,0,0);
-gimbalG.rotateY(y);gimbalG.rotateX(b);
+gimbalG.rotateY(y);gimbalG.rotateX(p);
 innerG.rotation.set(0,0,0);
 innerG.rotateY(y);
 sp+=0.28;rotorG.rotation.y=sp;
