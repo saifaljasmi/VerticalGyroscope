@@ -88,15 +88,16 @@ const pp1=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.6,16),pitchPin
 pp1.rotation.x=Math.PI/2;pp1.position.set(0,0,1.9);frameG.add(pp1);
 const pp2=pp1.clone();pp2.position.set(0,0,-1.9);frameG.add(pp2);
 const acMat=new THREE.MeshStandardMaterial({color:AC_C,roughness:0.5,metalness:0.45});
+const acG=new THREE.Group();acG.rotation.y=-Math.PI/2;frameG.add(acG);
 const fus=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,4.4,14),acMat);
-fus.rotation.z=Math.PI/2;fus.position.y=-2.8;frameG.add(fus);
+fus.rotation.z=Math.PI/2;fus.position.y=-2.8;acG.add(fus);
 const nose=new THREE.Mesh(new THREE.ConeGeometry(0.15,0.44,16),acMat);
-nose.rotation.z=-Math.PI/2;nose.position.set(2.42,-2.8,0);frameG.add(nose);
+nose.rotation.z=-Math.PI/2;nose.position.set(2.42,-2.8,0);acG.add(nose);
 const wing=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.03,3.2),acMat);
-wing.position.set(0.35,-2.8,0);frameG.add(wing);
+wing.position.set(0.35,-2.8,0);acG.add(wing);
 const tail=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.48,0.03),acMat);
-tail.position.set(-2.05,-2.57,0);frameG.add(tail);
-tag('AIRCRAFT',frameG,[1.4,-2.8,0],[0,24],'#6E747A');
+tail.position.set(-2.05,-2.57,0);acG.add(tail);
+tag('AIRCRAFT',acG,[1.4,-2.8,0],[0,24],'#6E747A');
 tag('FRAME / CASE',frameG,[0,1.52,-1.52],[-16,-22],'#5C6268');
 tag('OUTER GIMBAL BEARINGS',frameG,[0,0,1.9],[76,18],'#4A5056');
 /* GIMBAL : horizontal ring, XZ plane */
